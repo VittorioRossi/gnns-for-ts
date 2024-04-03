@@ -136,3 +136,22 @@ def load_data(graph_signal_matrix_filename, batch_size=64, num_of_weeks=1, num_o
     data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     return data_loader
+
+
+
+if __name__ == "__main__":
+
+    print("Loading the data...")
+    # Load the data
+    data_loader = load_data('data/PEMS04/pems04.npz')
+
+    # Print the first lines of the dataset
+    for idx, (week_sample, day_sample, hour_sample, target) in enumerate(data_loader):
+        print(f"Sample {idx+1}:")
+        print("Week sample:", week_sample)
+        print("Day sample:", day_sample)
+        print("Hour sample:", hour_sample)
+        print("Target:", target)
+        print()
+        if idx == 4:  # Print only the first 5 samples
+            break
