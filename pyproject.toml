@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "gnns-for-ts"
+version = "0.1.0"
+description = ""
+authors = ["VittorioRossi <rossi.vittori@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+
+[[tool.poetry.source]]
+name = "pytorch_cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "explicit"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
