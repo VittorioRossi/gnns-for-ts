@@ -1,21 +1,6 @@
 import torch
-from torch.nn import Linear, ReLU, Dropout
-from torch_geometric.nn import GCNConv, GraphNorm
-
-
-class NNAR(torch.nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super(NNAR, self).__init__()
-        self.fc1 = Linear(input_size, hidden_size)  # Input to hidden layer
-        self.relu = ReLU()                          # Activation function
-        self.fc2 = Linear(hidden_size, output_size) # Hidden to output layer
-
-    def forward(self, x):
-        x = self.relu(self.fc1(x))  # Activation function applied to hidden layer
-        x = self.fc2(x)             # Output layer
-        return x
-
-
+from torch.nn import Linear, ReLU, Dropout, ModuleList, Sequential
+from torch_geometric.nn import GCNConv
 
 class BaselineGCN(torch.nn.Module):
     """
@@ -64,80 +49,44 @@ class BaselineGCN(torch.nn.Module):
 
 class MultiLayerGCN(torch.nn.Module):
     """
-    Graph Convolutional Network (GCN) model.
+    A dynamic and modular Graph Convolutional Network (GCN) model that supports various types of GCN layers.
 
     Args:
-        num_of_features (int): Number of input features.
-        num_feature_out (int): Number of output features.
-
-    Attributes:
-        conv1 (GCNConv): First graph convolutional layer.
-        conv2 (GCNConv): Second graph convolutional layer.
-        conv3 (GCNConv): Third graph convolutional layer.
-        lin (Linear): Linear layer for output.
-
+        num_features (int): Number of input features.
+        num_features_out (int): Number of output features.
+        layer_configs (list): Configuration for each layer, including type and parameters.
+        linear_layers (list of int): Number of features for each linear layer.
+        dropout (float): Dropout rate.
     """
+    def __init__(self, num_features, num_features_out, layer_configs, linear_layers, dropout=0.2):
+        super(MultiLayerGCN, self).__init__()
+        self.layers = ModuleList()
 
-    def __init__(self, 
-                 num_of_features, 
-                 num_feature_out, 
-                 embedding_inner_layer = 512,
-                 embedding_size: int = 128,
-                 hidden_channels: int = 1024,
-                 dropout=0.2,
-                 graph_normalization=False):
-        
-        super().__init__()
-        self.graph_convolution_1 = GCNConv(num_of_features, embedding_inner_layer)
-        self.graph_convolution_2 = GCNConv(embedding_inner_layer, embedding_size)
-        self.graph_normalization = GraphNorm(embedding_inner_layer) if graph_normalization else lambda x: x
-        
-        self.linear_1 = Linear(embedding_size, hidden_channels)
-        self.linear_2 = Linear(hidden_channels, num_feature_out)
+        # Building the GCN layers dynamically based on configuration
+        in_channels = num_features
+        for config in layer_configs:
+            layer_type = config['type']
+            layer_params = {k: v for k, v in config.items() if k != 'type'}
+            layer = layer_type(in_channels, **layer_params)
+            self.layers.append(layer)
+            in_channels = layer_params.get('out_channels', in_channels)  # Update in_channels for next layer
 
-        self.dropout = Dropout(p=dropout) if dropout > 0 else lambda x: x
-        self.activation = ReLU(inplace=False)
+        # Building the linear layers
+        linear_layers = [in_channels] + linear_layers
+        linear_modules = []
+        for in_features, out_features in zip(linear_layers[:-1], linear_layers[1:]):
+            linear_modules.append(Linear(in_features, out_features))
+            linear_modules.append(ReLU(inplace=True))
+            linear_modules.append(Dropout(dropout))
 
-
-    def forward(self, x, edge_index, edge_weight):
-        """
-        Forward pass of the GCN model.
-
-        Args:
-            x (Tensor): Input features.
-            edge_index (LongTensor): Graph edge indices.
-
-        Returns:
-            out (Tensor): Output tensor.
-            h (Tensor): Hidden tensor.
-
-        """
-        h = self.graph_convolution_1(x, edge_index, edge_weight)
-        h = self.activation(h)
-        
-        h = self.graph_normalization(h)
-        h = self.graph_convolution_2(h, edge_index, edge_weight)
-        h = self.activation(h)
-
-        h = self.dropout(h)
-
-        h = self.linear_1(h)
-        h = self.activation(h)
-
-        h = self.dropout(h)
-
-        h = self.linear_2(h)
-        out = self.activation(h)
-
-        return out
-
-
-class EncoderDecoder:
-    def __init__(self, encoder, decoder):
-        self.encoder = encoder
-        self.decoder = decoder
+        linear_modules.append(Linear(linear_layers[-2], num_features_out))
+        self.linear_layers = Sequential(*linear_modules)
 
     def forward(self, x, edge_index, edge_weight):
-        x = self.encoder(x, edge_index, edge_weight)
-        x = self.decoder(x, edge_index, edge_weight)
+        # Process through GCN layers
+        for layer in self.layers:
+            x = layer(x, edge_index, edge_weight)
+
+        # Process through linear layers
+        x = self.linear_layers(x)
         return x

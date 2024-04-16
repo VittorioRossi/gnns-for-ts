@@ -1,9 +1,11 @@
 from .models import *
+from .layers import GCNLayer, GCNLSTMCell
 from .dcrnn import *
 
 __all__ = [
-    'NNAR',
     'BaselineGCN',
-    'MultiLayerGCN'
-    'DCRNN']
+    'MultiLayerGCN',
+    'DCRNN',
+    'GCNLayer',
+    'GCNLSTMCell']
 

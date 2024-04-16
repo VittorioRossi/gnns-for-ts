@@ -25,12 +25,12 @@ def setup_plot(time_series, time_points=None, x_label='Time', y_label='Value', t
     
     return fig, ax
 
-def viz_ts(time_series, time_points=None, x_label='Time', y_label='Value', title='Time Series Plot'):
+def viz_ts(time_series, time_points=None, x_label='Time', y_label='Value', title='Time Series Plot', *args, **kwargs):
     """
     Plots a static time series graph.
     """
     fig, ax = setup_plot(time_series, time_points, x_label, y_label, title)
-    sns.lineplot(x=time_points or list(range(len(time_series))), y=time_series, ax=ax)
+    sns.lineplot(x=time_points or list(range(len(time_series))), y=time_series, ax=ax, *args, **kwargs)
     return fig, ax
 
 
