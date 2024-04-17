@@ -233,7 +233,9 @@ def train_model(model,
     """
     
     if reset_weights:
-        model.reset_parameters()
+        for layer in model.children():
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
 
     early_stopper = EarlyStopper(patience=patience, min_delta=min_delta)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
