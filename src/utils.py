@@ -4,6 +4,7 @@ import torch.optim as optim
 from tqdm.auto import tqdm
 
 from typing import Any
+from copy import deepcopy
 
 def create_train_test_split(data, 
                             train_ratio = 0.7,
@@ -204,7 +205,17 @@ class Evaluator:
                     self.best_model = model.state_dict()
 
 
-def train_model(model, train_loader, val_loader, criterion, device, epochs=100, batch_size=128, learning_rate=1e-4, patience=2, min_delta=0.0005):
+def train_model(model, 
+                train_loader, 
+                val_loader, 
+                criterion, 
+                device, 
+                epochs=100, 
+                learning_rate=1e-4, 
+                patience=2, 
+                min_delta=0.0005,
+                reset_weights=True,
+                ):
     """
     Trains the given model using the provided datasets and training parameters.
     
@@ -215,12 +226,15 @@ def train_model(model, train_loader, val_loader, criterion, device, epochs=100, 
         criterion (callable): The loss function.
         device (torch.device): The device to run the model on (CPU or GPU).
         epochs (int): The maximum number of epochs to train.
-        batch_size (int): The size of each batch during training.
         learning_rate (float): The learning rate for the optimizer.
         patience (int): The patience for early stopping.
         min_delta (float): The minimum delta change to qualify as an improvement for early stopping.
+        reset_weights (bool): Flag indicating whether to reset the model weights before training. Default is True.
     """
     
+    if reset_weights:
+        model.reset_parameters()
+
     early_stopper = EarlyStopper(patience=patience, min_delta=min_delta)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
