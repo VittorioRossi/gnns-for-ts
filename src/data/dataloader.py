@@ -1,12 +1,30 @@
-from src.utils import aggregate_time_series
-
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from torch_geometric.data import Data
 
 import numpy as np
         
 from typing import Callable
+
+def aggregate_time_series(data, new_granularity, aggregation_func):
+    """
+    Aggregates the time series data based on the new granularity.
+
+    Args:
+        data (numpy.ndarray): The input time series data.
+        new_granularity (int): The new granularity for the data.
+        aggregation_func (Callable[[np.ndarray], np.ndarray]): The aggregation function to use.
+
+    Returns:
+        numpy.ndarray: The aggregated time series data.
+    """
+    if data.shape[0] % new_granularity != 0:
+        # Pad the sequence with zeros
+        pad_length = new_granularity - (data.shape[0] % new_granularity)
+        data = np.pad(data, [(0, pad_length), (0, 0)], mode='constant')
+    
+    return aggregation_func(data.reshape(-1, new_granularity, *data.shape[1:]), axis=1)
+
 
 class TimeSeriesDataset(Dataset):
     """

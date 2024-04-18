@@ -1,10 +1,15 @@
 import numpy as np
+import pandas as pd
+
 import torch
 import torch.optim as optim
 from tqdm.auto import tqdm
 
 from typing import Any
 from copy import deepcopy
+
+from src.data import TimeSeriesGCNNDataset
+from torch_geometric.data import DataLoader
 
 def create_train_test_split(data, 
                             train_ratio = 0.7,
@@ -79,26 +84,6 @@ def compute_test_loss(model, loss_fn, test_data_loader, device):
     return loss
 
 
-def aggregate_time_series(data, new_granularity, aggregation_func):
-    """
-    Aggregates the time series data based on the new granularity.
-
-    Args:
-        data (numpy.ndarray): The input time series data.
-        new_granularity (int): The new granularity for the data.
-        aggregation_func (Callable[[np.ndarray], np.ndarray]): The aggregation function to use.
-
-    Returns:
-        numpy.ndarray: The aggregated time series data.
-    """
-    if data.shape[0] % new_granularity != 0:
-        # Pad the sequence with zeros
-        pad_length = new_granularity - (data.shape[0] % new_granularity)
-        data = np.pad(data, [(0, pad_length), (0, 0)], mode='constant')
-    
-    return aggregation_func(data.reshape(-1, new_granularity, *data.shape[1:]), axis=1)
-
-
 
 class EarlyStopper:
     """
@@ -160,7 +145,7 @@ class Evaluator:
 
         return metrics
 
-    def evaluate_dataloader(self, data_loader, model, device) -> dict[str, float]:
+    def evaluate_dataloader(self, data_loader, model, device, **kwargs) -> dict[str, float]:
         """
         Evaluates the metrics of a model on a dataset.
 
@@ -172,7 +157,9 @@ class Evaluator:
         Returns:
             dict: A dictionary containing the computed metrics.
         """
+
         model.eval()  # Set the model to evaluation mode
+        metrics = []
         with torch.no_grad():
             for batch in data_loader:
                 batch = batch.to(device)  # Move batch to device
@@ -180,13 +167,15 @@ class Evaluator:
 
                 y_true = batch.y.cpu().numpy()
                 y_pred = outputs.cpu().numpy()
-                metrics = self.evaluate(y_true, y_pred, save_history=True)
+                crt_mtr = self.evaluate(y_true, y_pred, save_history=True)
+                metrics.append(crt_mtr)
         
         if hasattr(self, 'save_best'):
             self._update_best(metrics, model)
 
-        return metrics
+        return {metric: np.mean([m[metric] for m in metrics]) for metric in metrics[0].keys()}
     
+
     def _update_best(self, metrics, model):
             """
             Updates the best model based on the given metrics.
@@ -205,6 +194,52 @@ class Evaluator:
                     self.best_model = model.state_dict()
 
 
+def create_loader(raw_data:np.ndarray, 
+                  adj_matrix:np.ndarray,
+                  cost_matrix:np.ndarray,
+                  train_split = 0.7, 
+                  test_split = 0.2,
+                  window_size = 12,
+                  target_size = 1,
+                  granularity = 12,
+                  batch_size = 64,
+                  standardize = True,
+                  **kwargs) -> tuple:
+                  
+    train_data, test_data, val_data = create_train_test_split(raw_data, 
+                                                              train_ratio=train_split, 
+                                                              test_ratio=test_split)
+
+    train_dataset = TimeSeriesGCNNDataset(train_data,
+                                          adj_matrix,
+                                          cost_matrix,
+                                          window_size=window_size,
+                                          target_size=target_size,
+                                          new_granularity=granularity, 
+                                          standardize=standardize)
+
+    test_dataset = TimeSeriesGCNNDataset(test_data,
+                                         adj_matrix,
+                                         cost_matrix,
+                                         window_size=window_size,
+                                         target_size=target_size,
+                                         new_granularity=granularity, 
+                                         standardize=standardize)                                         
+
+    val_dataset = TimeSeriesGCNNDataset(val_data,
+                                         adj_matrix,
+                                         cost_matrix,
+                                         window_size=window_size,
+                                         target_size=target_size,
+                                         new_granularity=granularity, 
+                                         standardize=standardize)    
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+    return train_loader, test_loader, val_loader
+
 def train_model(model, 
                 train_loader, 
                 val_loader, 
@@ -215,6 +250,7 @@ def train_model(model,
                 patience=2, 
                 min_delta=0.0005,
                 reset_weights=True,
+                **kwargs
                 ):
     """
     Trains the given model using the provided datasets and training parameters.
@@ -267,3 +303,11 @@ def train_model(model,
             break
 
     return model
+
+
+
+def load_raw(path_to_raw_data, path_to_raw_dist):
+    raw = np.load(path_to_raw_data)["data"]
+    raw_adj = pd.read_csv(path_to_raw_dist)[["from", "to"]].to_numpy()
+    raw_dist = pd.read_csv(path_to_raw_dist)[["cost"]].to_numpy()
+    return raw[:, :, 0], raw_adj, raw_dist
